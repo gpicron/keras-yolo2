@@ -31,10 +31,18 @@ argparser.add_argument(
     '--input',
     help='path to an image or an video (mp4 format)')
 
+argparser.add_argument(
+    '-l',
+    '--lite',
+    action='store_true',
+    help='use tf lite')
+
+
 def _main_(args):
     config_path  = args.conf
     weights_path = args.weights
     image_path   = args.input
+    use_lite = args.lite
 
     with open(config_path) as config_buffer:    
         config = json.load(config_buffer)
@@ -74,8 +82,14 @@ def _main_(args):
 
         for i in tqdm(range(nb_frames)):
             _, image = video_reader.read()
-            
-            boxes = yolo.predict(image)
+
+#            if i % 24 == 0:
+            if use_lite:
+                boxes = yolo.predict_tflite(image)
+            else:
+                boxes = yolo.predict(image)
+#            else:
+#                boxes = []
             image = draw_boxes(image, boxes, config['model']['labels'])
 
             video_writer.write(np.uint8(image))
@@ -84,7 +98,11 @@ def _main_(args):
         video_writer.release()  
     else:
         image = cv2.imread(image_path)
-        boxes = yolo.predict(image)
+        if use_lite:
+            boxes = yolo.predict_tflite(image)
+        else:
+            boxes = yolo.predict(image)
+
         image = draw_boxes(image, boxes, config['model']['labels'])
 
         print(len(boxes), 'boxes are found')

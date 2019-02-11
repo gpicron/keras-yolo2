@@ -30,6 +30,9 @@ class BoundBox:
             
         return self.score
 
+    def __repr__(self):
+        return "BB(%s,%s,%s,%s,scores:%s)" % (self.xmin, self.ymin,self.xmax,self.ymax,self.classes)
+
 class WeightReader:
     def __init__(self, weight_file):
         self.offset = 4
@@ -122,7 +125,7 @@ def decode_netout(netout, anchors, nb_class, obj_threshold=0.3, nms_threshold=0.
                         
     # remove the boxes which are less likely than a obj_threshold
     boxes = [box for box in boxes if box.get_score() > obj_threshold]
-    
+
     return boxes    
 
 def compute_overlap(a, b):

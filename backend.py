@@ -40,6 +40,7 @@ class FullYoloFeature(BaseFeatureExtractor):
 
         # the function to implement the orgnization layer (thanks to github.com/allanzelener/YAD2K)
         def space_to_depth_x2(x):
+            import tensorflow as tf
             return tf.space_to_depth(x, block_size=2)
 
         # Layer 1
@@ -210,7 +211,7 @@ class MobileNetFeature(BaseFeatureExtractor):
     def __init__(self, input_size):
         input_image = Input(shape=(input_size, input_size, 3))
 
-        mobilenet = MobileNet(input_shape=(224,224,3), include_top=False)
+        mobilenet = MobileNet(input_shape=(224,224,3), include_top=False, )
         mobilenet.load_weights(MOBILENET_BACKEND_PATH)
 
         x = mobilenet(input_image)

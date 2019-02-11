@@ -16,14 +16,14 @@
         "batch_size":           16,
         "learning_rate":        1e-4,
         "nb_epochs":            8,
-        "warmup_epochs":        3,
+        "warmup_epochs":        1,
 
         "object_scale":         5.0 ,
         "no_object_scale":      1.0,
         "coord_scale":          1.0,
         "class_scale":          1.0,
 
-        "saved_weights_name":   "/content/gdrive/My Drive/Colab Notebooks/head_detect/mn_head_best.h5",
+        "saved_weights_name":   "/content/gdrive/My Drive/Colab Notebooks/head_detect/mn_head_best-{epoch:02d}-{val_acc:.2f}.h5",
         "debug":                false
     },
 

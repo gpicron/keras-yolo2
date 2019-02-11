@@ -2,6 +2,7 @@ from keras.models import Model
 from keras.layers import Reshape, Activation, Conv2D, Input, MaxPooling2D, BatchNormalization, Flatten, Dense, Lambda
 from keras.layers.advanced_activations import LeakyReLU
 import tensorflow as tf
+from tensorflow.python.framework import dtypes
 import numpy as np
 import os
 import cv2
@@ -12,6 +13,8 @@ from keras.optimizers import SGD, Adam, RMSprop
 from preprocessing import BatchGenerator
 from keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from backend import TinyYoloFeature, FullYoloFeature, MobileNetFeature, SqueezeNetFeature, Inception3Feature, VGG16Feature, ResNet50Feature
+
+import keras.backend as K
 
 class YOLO(object):
     def __init__(self, backend,
@@ -35,7 +38,7 @@ class YOLO(object):
         ##########################
 
         # make the feature extractor layers
-        input_image     = Input(shape=(self.input_size, self.input_size, 3))
+        input_image     = Input(shape=(self.input_size, self.input_size, 3), dtype= "float32")
         self.true_boxes = Input(shape=(1, 1, 1, max_box_per_image , 4))  
 
         if backend == 'Inception3':
@@ -57,7 +60,8 @@ class YOLO(object):
 
         print(self.feature_extractor.get_output_shape())    
         self.grid_h, self.grid_w = self.feature_extractor.get_output_shape()        
-        features = self.feature_extractor.extract(input_image)            
+        #features = self.feature_extractor.extract(input_image)
+        features = self.feature_extractor.feature_extractor.output
 
         # make the object detection layer
         output = Conv2D(self.nb_box * (4 + 1 + self.nb_class), 
@@ -66,11 +70,15 @@ class YOLO(object):
                         name='DetectionLayer', 
                         kernel_initializer='lecun_normal')(features)
         output = Reshape((self.grid_h, self.grid_w, self.nb_box, 4 + 1 + self.nb_class))(output)
+        self.true_output = output
         output = Lambda(lambda args: args[0])([output, self.true_boxes])
 
-        self.model = Model([input_image, self.true_boxes], output)
+        #self.model = Model([input_image, self.true_boxes], output)
+        self.model = Model([self.feature_extractor.feature_extractor.input , self.true_boxes], output)
+        self.tflite_model = None
+        self.lite_interpreter = None
 
-        
+
         # initialize the weights of the detection layer
         layer = self.model.layers[-4]
         weights = layer.get_weights()
@@ -240,7 +248,23 @@ class YOLO(object):
         return loss
 
     def load_weights(self, weight_path):
-        self.model.load_weights(weight_path)
+        self.model.load_weights(weight_path, by_name=True, skip_mismatch=True)
+
+    def convert_to_lite(self):
+
+        model_path = "tmp_model.h5"
+        infer_model = Model([self.model.inputs[0]], [self.true_output])
+
+        infer_model.save(model_path)
+        converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path)
+
+        self.tflite_model = converter.convert()
+        #open("%s.tflite" % weight_path, "wb").write(self.tflite_model)
+
+        self.lite_interpreter = tf.lite.Interpreter(model_content=self.tflite_model)
+        self.lite_interpreter.allocate_tensors()
+
+
 
     def train(self, train_imgs,     # the list of images to train the model
                     valid_imgs,     # the list of images used to validate the model
@@ -315,7 +339,7 @@ class YOLO(object):
                                      save_best_only=True, 
                                      mode='min', 
                                      period=1)
-        tensorboard = TensorBoard(log_dir=os.path.expanduser('~/logs/'), 
+        tensorboard = TensorBoard(log_dir=os.path.expanduser('~/logs/'),
                                   histogram_freq=0, 
                                   #write_batch_performance=True,
                                   write_graph=True, 
@@ -468,6 +492,38 @@ class YOLO(object):
         dummy_array = np.zeros((1,1,1,1,self.max_box_per_image,4))
 
         netout = self.model.predict([input_image, dummy_array])[0]
+        boxes  = decode_netout(netout, self.anchors, self.nb_class)
+
+        return boxes
+
+    def predict_tflite(self,image):
+        if self.tflite_model is None:
+            self.convert_to_lite()
+
+        # Get input and output tensors.
+        input_details = self.lite_interpreter.get_input_details()
+        output_details = self.lite_interpreter.get_output_details()
+
+        #print(input_details)
+        #print(output_details)
+
+        image_h, image_w, _ = image.shape
+        image = cv2.resize(image, (self.input_size, self.input_size))
+        image = self.feature_extractor.normalize(image)
+
+        input_image = image[:,:,::-1]
+        input_image = np.expand_dims(input_image, 0)
+
+#        netout = self.model.predict([input_image, dummy_array])[0]
+
+        input_tensor= input_image.astype(np.float32)
+
+        self.lite_interpreter.set_tensor(input_details[0]['index'], input_tensor)
+
+        self.lite_interpreter.invoke()
+
+        netout = self.lite_interpreter.get_tensor(output_details[0]['index'])
+
         boxes  = decode_netout(netout, self.anchors, self.nb_class)
 
         return boxes
