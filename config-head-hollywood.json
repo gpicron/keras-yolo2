@@ -1,7 +1,7 @@
 {
     "model" : {
-        "backend":              "Full Yolo",
-        "input_size":           416,
+        "backend":              "MobileNet",
+        "input_size":           224,
         "anchors":              [0.71,1.48, 1.36,2.74, 2.16,4.69, 3.33,7.23, 5.18,9.71],
         "max_box_per_image":    10,        
         "labels":               ["head"]
@@ -23,7 +23,7 @@
         "coord_scale":          1.0,
         "class_scale":          1.0,
 
-        "saved_weights_name":   "/content/gdrive/My Drive/Colad Notebooks/head_detect/full_yolo_head.h5",
+        "saved_weights_name":   "/content/gdrive/My Drive/Colad Notebooks/head_detect/mn_head_best.h5",
         "debug":                false
     },
 
