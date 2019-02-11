@@ -214,9 +214,9 @@ class MobileNetFeature(BaseFeatureExtractor):
         mobilenet = MobileNet(input_shape=(224,224,3), include_top=False, )
         mobilenet.load_weights(MOBILENET_BACKEND_PATH)
 
-        x = mobilenet(input_image)
+        #x = mobilenet.o
 
-        self.feature_extractor = Model(input_image, x)  
+        self.feature_extractor = Model(input_image, mobilenet.outputs)
 
     def normalize(self, image):
         image = image / 255.
