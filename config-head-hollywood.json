@@ -23,7 +23,7 @@
         "coord_scale":          1.0,
         "class_scale":          1.0,
 
-        "saved_weights_name":   "full_yolo_head.h5",
+        "saved_weights_name":   "/content/gdrive/My Drive/Colad Notebooks/head_detect/full_yolo_head.h5",
         "debug":                false
     },
 
