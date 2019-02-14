@@ -67,7 +67,7 @@ def _main_(args):
     #   Predict bounding boxes 
     ###############################
 
-    if image_path[-4:] == '.mp4':
+    if image_path[-4:] in [ '.mp4', '.avi' ]:
         video_out = image_path[:-4] + '_detected' + image_path[-4:]
         video_reader = cv2.VideoCapture(image_path)
 
@@ -92,6 +92,12 @@ def _main_(args):
 #                boxes = []
             image = draw_boxes(image, boxes, config['model']['labels'])
 
+           # cv2.imshow("video",image)
+           # if cv2.waitKey(1) & 0xFF == ord('q'):
+           #     break
+
+
+
             video_writer.write(np.uint8(image))
 
         video_reader.release()
@@ -107,7 +113,7 @@ def _main_(args):
 
         print(len(boxes), 'boxes are found')
 
-        cv2.imwrite(image_path[:-4] + '_detected' + image_path[-4:], image)
+        cv2.imwrite(image_path[:-4] + '_detected.jpg', image)
 
 if __name__ == '__main__':
     args = argparser.parse_args()

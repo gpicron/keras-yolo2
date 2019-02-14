@@ -12,7 +12,7 @@ from keras.layers.merge import concatenate
 from keras.optimizers import SGD, Adam, RMSprop
 from preprocessing import BatchGenerator
 from keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
-from backend import TinyYoloFeature, FullYoloFeature, MobileNetFeature, SqueezeNetFeature, Inception3Feature, VGG16Feature, ResNet50Feature
+from backend import TinyYoloFeature, FullYoloFeature, MobileNetFeature, MobileNetV2Feature, SqueezeNetFeature, Inception3Feature, VGG16Feature, ResNet50Feature
 
 import keras.backend as K
 
@@ -47,6 +47,8 @@ class YOLO(object):
             self.feature_extractor = SqueezeNetFeature(self.input_size)        
         elif backend == 'MobileNet':
             self.feature_extractor = MobileNetFeature(self.input_size)
+        elif backend == 'MobileNetV2':
+            self.feature_extractor = MobileNetV2Feature(self.input_size)
         elif backend == 'Full Yolo':
             self.feature_extractor = FullYoloFeature(self.input_size)
         elif backend == 'Tiny Yolo':
@@ -524,6 +526,6 @@ class YOLO(object):
 
         netout = self.lite_interpreter.get_tensor(output_details[0]['index'])
 
-        boxes  = decode_netout(netout, self.anchors, self.nb_class)
+        boxes  = decode_netout(netout[0], self.anchors, self.nb_class)
 
         return boxes

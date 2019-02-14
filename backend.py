@@ -231,7 +231,7 @@ class MobileNetV2Feature(BaseFeatureExtractor):
     def __init__(self, input_size):
         input_image = Input(shape=(input_size, input_size, 3))
 
-        mobilenet = MobileNetV2(input_shape=(224,224,3), include_top=False)
+        mobilenet = MobileNetV2(input_shape=(224,224,3), include_top=False, alpha=1.3)
         #mobilenet.load_weights(MOBILENET_BACKEND_PATH)
 
         x = mobilenet(input_image)

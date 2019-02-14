@@ -1,0 +1,36 @@
+{
+    "model" : {
+        "backend":              "MobileNetV2",
+        "input_size":           224,
+        "anchors":              [0.38,0.80, 0.73,1.48, 1.16,2.53, 1.79,3.89, 2.79,5.23],
+        "max_box_per_image":    10,        
+        "labels":               ["head"]
+    },
+
+    "train": {
+        "train_image_folder":   "/content/HollywoodHeads/JPEGImages/",
+        "train_annot_folder":   "/content/HollywoodHeads/Annotations/",
+          
+        "train_times":          1,
+        "pretrained_weights":   "",
+        "batch_size":           16,
+        "learning_rate":        1e-4,
+        "nb_epochs":            8,
+        "warmup_epochs":        1,
+
+        "object_scale":         5.0 ,
+        "no_object_scale":      1.0,
+        "coord_scale":          1.0,
+        "class_scale":          1.0,
+
+        "saved_weights_name":   "/content/gdrive/My Drive/Colab Notebooks/head_detect/mnv2_head_best-{epoch:02d}-{val_loss:.4f}.h5",
+        "debug":                false
+    },
+
+    "valid": {
+        "valid_image_folder":   "",
+        "valid_annot_folder":   "",
+
+        "valid_times":          1
+    }
+}

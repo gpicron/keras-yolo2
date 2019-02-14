@@ -81,18 +81,18 @@ def decode_netout(netout, anchors, nb_class, obj_threshold=0.3, nms_threshold=0.
     grid_h, grid_w, nb_box = netout.shape[:3]
 
     boxes = []
-    
+
     # decode the output by the network
     netout[..., 4]  = _sigmoid(netout[..., 4])
     netout[..., 5:] = netout[..., 4][..., np.newaxis] * _softmax(netout[..., 5:])
     netout[..., 5:] *= netout[..., 5:] > obj_threshold
-    
+
     for row in range(grid_h):
         for col in range(grid_w):
             for b in range(nb_box):
                 # from 4th element onwards are confidence and class classes
                 classes = netout[row,col,b,5:]
-                
+
                 if np.sum(classes) > 0:
                     # first 4 elements are x, y, w, and h
                     x, y, w, h = netout[row,col,b,:4]
