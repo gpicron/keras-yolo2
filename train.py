@@ -94,7 +94,8 @@ def _main_(args):
                coord_scale        = config['train']['coord_scale'],
                class_scale        = config['train']['class_scale'],
                saved_weights_name = config['train']['saved_weights_name'],
-               debug              = config['train']['debug'])
+               debug              = config['train']['debug'],
+               nb_epoch_freeze_tower = config['train']['nb_epoch_freeze_tower'])
 
 if __name__ == '__main__':
     args = argparser.parse_args()

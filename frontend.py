@@ -281,7 +281,9 @@ class YOLO(object):
                     coord_scale,
                     class_scale,
                     saved_weights_name='best_weights.h5',
-                    debug=False):     
+                    debug=False,
+                    initial_epoch=0,
+                    nb_epoch_freeze_tower=0):
 
         self.batch_size = batch_size
 
@@ -320,13 +322,6 @@ class YOLO(object):
         self.warmup_batches  = warmup_epochs * (train_times*len(train_generator) + valid_times*len(valid_generator))   
 
         ############################################
-        # Compile the model
-        ############################################
-
-        optimizer = Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-        self.model.compile(loss=self.custom_loss, optimizer=optimizer)
-
-        ############################################
         # Make a few callbacks
         ############################################
 
@@ -350,17 +345,45 @@ class YOLO(object):
         ############################################
         # Start the training process
         ############################################        
+        optimizer = Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 
-        self.model.fit_generator(generator        = train_generator, 
-                                 steps_per_epoch  = len(train_generator) * train_times, 
-                                 epochs           = warmup_epochs + nb_epochs, 
-                                 verbose          = 2 if debug else 1,
-                                 validation_data  = valid_generator,
-                                 validation_steps = len(valid_generator) * valid_times,
-                                 callbacks        = [early_stop, checkpoint, tensorboard], 
-                                 workers          = 3,
-                                 max_queue_size   = 8)      
+        total_epochs = warmup_epochs + nb_epochs
 
+        frozen_epochs = min(nb_epoch_freeze_tower, total_epochs)
+        unfrozen_epochs = total_epochs - frozen_epochs
+
+        if frozen_epochs > 0:
+            self.feature_extractor.freeze()
+
+            self.model.compile(loss=self.custom_loss, optimizer=optimizer)
+
+            self.model.fit_generator(generator        = train_generator,
+                                     steps_per_epoch  = len(train_generator) * train_times,
+                                     epochs           = frozen_epochs,
+                                     verbose          = 2 if debug else 1,
+                                     validation_data  = valid_generator,
+                                     validation_steps = len(valid_generator) * valid_times,
+                                     callbacks        = [early_stop, checkpoint, tensorboard],
+                                     workers          = 3,
+                                     max_queue_size   = 8,
+                                     initial_epoch    = initial_epoch)
+
+        if unfrozen_epochs > 0:
+            self.feature_extractor.unfreeze()
+
+            self.model.compile(loss=self.custom_loss, optimizer=optimizer)
+
+            self.model.fit_generator(generator        = train_generator,
+                                     steps_per_epoch  = len(train_generator) * train_times,
+                                     epochs           = unfrozen_epochs,
+                                     verbose          = 2 if debug else 1,
+                                     validation_data  = valid_generator,
+                                     validation_steps = len(valid_generator) * valid_times,
+                                     callbacks        = [early_stop, checkpoint, tensorboard],
+                                     workers          = 3,
+                                     max_queue_size   = 8,
+                                     initial_epoch    = initial_epoch)
+    
         ############################################
         # Compute mAP on the validation set
         ############################################

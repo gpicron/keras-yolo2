@@ -34,6 +34,12 @@ class BaseFeatureExtractor(object):
     def extract(self, input_image):
         return self.feature_extractor(input_image)
 
+    def freeze(self):
+        self.feature_extractor.trainable = False
+
+    def unfreeze(self):
+        self.feature_extractor.trainable = True
+
 class FullYoloFeature(BaseFeatureExtractor):
     """docstring for ClassName"""
     def __init__(self, input_size):

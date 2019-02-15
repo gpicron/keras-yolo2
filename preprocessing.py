@@ -58,7 +58,7 @@ def parse_annotation(ann_dir, img_dir, labels=[]):
     return all_imgs, seen_labels
 
 class BatchGenerator(Sequence):
-    def     __init__(self, images,
+    def __init__(self, images,
                        config, 
                        shuffle=True, 
                        jitter=True, 
@@ -257,6 +257,11 @@ class BatchGenerator(Sequence):
 
         h, w, c = image.shape
         all_objs = copy.deepcopy(train_instance['object'])
+
+        expectAspectRatio = self.config['IMAGE_H'] / self.config['IMAGE_W']
+        originAspectRatio = h / w
+
+
 
         if jitter:
             ### scale the image
