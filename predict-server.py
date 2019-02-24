@@ -41,6 +41,11 @@ argparser.add_argument(
     '--lite',
     action='store_true',
     help='use tf lite')
+argparser.add_argument(
+    '-p',
+    '--port',
+    default=5000,
+    help='sever port')
 
 
 def _main_(args):
@@ -48,6 +53,7 @@ def _main_(args):
     weights_path = args.weights
     image_path   = args.input
     use_lite = args.lite
+    port = args.port
 
     with open(config_path) as config_buffer:
         config = json.load(config_buffer)
@@ -116,7 +122,7 @@ def _main_(args):
 
 
     # start flask app
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=port)
 
 if __name__ == '__main__':
     args = argparser.parse_args()

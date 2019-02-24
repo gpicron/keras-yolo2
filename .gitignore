@@ -166,3 +166,4 @@ fabric.properties
 !/mobilenet_backend.h5
 !/mn_head_best.h5
 !/tiny_yolo_backend.h5
+!/50epochsTinyYolo.h5
