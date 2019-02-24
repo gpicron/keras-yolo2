@@ -162,3 +162,5 @@ fabric.properties
 *.mp4
 *.h5
 *.avi
+!/mn_head_best-06-0.0224.h5
+!/mobilenet_backend.h5
