@@ -1,0 +1,36 @@
+{
+    "model" : {
+        "backend":              "Tiny Yolo",
+        "input_size":           416,
+        "anchors":              [0.56, 1.10, 0.81, 2.58, 2.62, 4.30, 2.86, 1.23, 4.91, 5.65],
+        "max_box_per_image":    10,
+        "labels":               ["person", "bat", "rifle", "knive"]
+    },
+
+    "train": {
+        "train_image_folder":   "./train_images/",
+        "train_annot_folder":   "./train_labels/",
+          
+        "train_times":          1,
+        "pretrained_weights":   "50EpochsTinyYolo.h5",
+        "batch_size":           25,
+        "learning_rate":        1e-4,
+        "nb_epochs":            50,
+        "warmup_epochs":        2,
+
+        "object_scale":         5.0,
+        "no_object_scale":      1.0,
+        "coord_scale":          1.0,
+        "class_scale":          1.0,
+
+        "saved_weights_name":   "50EpochsTinyYolo.h5",
+        "debug":                false
+    },
+
+    "valid": {
+        "valid_image_folder":   "./val_images/",
+        "valid_annot_folder":   "./val_labels/",
+
+        "valid_times":          1
+    }
+}
