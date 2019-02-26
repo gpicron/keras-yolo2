@@ -167,3 +167,6 @@ fabric.properties
 !/mn_head_best.h5
 !/tiny_yolo_backend.h5
 !/50epochsTinyYolo.h5
+/openvino/l_openvino_toolkit_p_2018.5.455_online/
+/tmp_frozen_model.*
+/..bfg-report/

@@ -5,7 +5,6 @@ import os
 import cv2
 import numpy as np
 from tqdm import tqdm
-from preprocessing import parse_annotation
 from utils import draw_boxes
 from frontend import YOLO
 import json
@@ -32,17 +31,17 @@ argparser.add_argument(
     help='path to an image or an video (mp4 format)')
 
 argparser.add_argument(
-    '-l',
-    '--lite',
-    action='store_true',
-    help='use tf lite')
+    '-e',
+    '--inference_engine',
+    default='keras',
+    help='keras, tf, tflite or openvino')
 
 
 def _main_(args):
     config_path  = args.conf
     weights_path = args.weights
     image_path   = args.input
-    use_lite = args.lite
+    inference_engine = args.inference_engine
 
     with open(config_path) as config_buffer:    
         config = json.load(config_buffer)
@@ -66,6 +65,7 @@ def _main_(args):
     ###############################
     #   Predict bounding boxes 
     ###############################
+    yolo.use_inference_engine(inference_engine)
 
     if image_path[-4:] in [ '.mp4', '.avi' ]:
         video_out = image_path[:-4] + '_detected' + image_path[-4:]
@@ -80,34 +80,28 @@ def _main_(args):
                                50.0, 
                                (frame_w, frame_h))
 
+
+
         for i in tqdm(range(nb_frames)):
             _, image = video_reader.read()
 
-#            if i % 24 == 0:
-            if use_lite:
-                boxes = yolo.predict_tflite(image)
-            else:
+            if image  is not None:
                 boxes = yolo.predict(image)
-#            else:
-#                boxes = []
-            image = draw_boxes(image, boxes, config['model']['labels'])
+                image = draw_boxes(image, boxes, config['model']['labels'])
 
-           # cv2.imshow("video",image)
-           # if cv2.waitKey(1) & 0xFF == ord('q'):
-           #     break
+            #cv2.imshow("video",image)
 
+            #if cv2.waitKey(1) & 0xFF == ord('q'):
+            #  break
 
-
-            video_writer.write(np.uint8(image))
+                video_writer.write(np.uint8(image))
 
         video_reader.release()
         video_writer.release()  
     else:
         image = cv2.imread(image_path)
-        if use_lite:
-            boxes = yolo.predict_tflite(image)
-        else:
-            boxes = yolo.predict(image)
+
+        boxes = yolo.predict(image)
 
         image = draw_boxes(image, boxes, config['model']['labels'])
 

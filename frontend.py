@@ -1,11 +1,17 @@
+from typing import NamedTuple
+
+import sys
+
+
 from keras.models import Model
 from keras.layers import Reshape, Activation, Conv2D, Input, MaxPooling2D, BatchNormalization, Flatten, Dense, Lambda
 from keras.layers.advanced_activations import LeakyReLU
-import tensorflow as tf
-from tensorflow.python.framework import dtypes
+
 import numpy as np
 import os
 import cv2
+
+
 from utils import decode_netout, compute_overlap, compute_ap
 from keras.applications.mobilenet import MobileNet
 from keras.layers.merge import concatenate
@@ -15,6 +21,8 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from backend import TinyYoloFeature, FullYoloFeature, MobileNetFeature, MobileNetV2Feature, SqueezeNetFeature, Inception3Feature, VGG16Feature, ResNet50Feature
 
 import keras.backend as K
+import tensorflow as tf
+
 
 class YOLO(object):
     def __init__(self, backend,
@@ -80,6 +88,12 @@ class YOLO(object):
         self.tflite_model = None
         self.lite_interpreter = None
 
+        self.frozen_graph = None
+
+        self.open_vino_exec_net = None
+
+        self.predict = self.predict_keras
+
 
         # initialize the weights of the detection layer
         layer = self.model.layers[-4]
@@ -92,6 +106,7 @@ class YOLO(object):
 
         # print a summary of the whole model
         self.model.summary()
+
 
     def custom_loss(self, y_true, y_pred):
         mask_shape = tf.shape(y_true)[:4]
@@ -258,13 +273,106 @@ class YOLO(object):
         infer_model = Model([self.model.inputs[0]], [self.true_output])
 
         infer_model.save(model_path)
-        converter = tf.lite.TFLiteConverter.from_keras_model_file(model_path)
+        converter = tf.contrib.lite.TFLiteConverter.from_keras_model_file(model_path)
 
         self.tflite_model = converter.convert()
         #open("%s.tflite" % weight_path, "wb").write(self.tflite_model)
 
-        self.lite_interpreter = tf.lite.Interpreter(model_content=self.tflite_model)
+        self.lite_interpreter = tf.contrib.lite.Interpreter(model_content=self.tflite_model)
         self.lite_interpreter.allocate_tensors()
+
+    def convert_to_frozen_tf(self):
+        from tensorflow.python.framework import graph_io
+
+        model_fname = "tmp_model.h5"
+        infer_model = Model([self.model.inputs[0]], [self.true_output])
+        infer_model.save(model_fname)
+        del infer_model
+
+        # Clear any previous session.
+        tf.keras.backend.clear_session()
+        K.clear_session()
+        tf.keras.backend.set_learning_phase(0)
+        K.set_learning_phase(0)
+
+
+        def freeze_graph(graph, session, output, save_pb_dir='.', save_pb_name='tmp_frozen_model.pb', save_pb_as_text=False):
+            with graph.as_default():
+                graphdef_inf = tf.graph_util.remove_training_nodes(graph.as_graph_def())
+                graphdef_frozen = tf.graph_util.convert_variables_to_constants(session, graphdef_inf, output)
+                graph_io.write_graph(graphdef_frozen, save_pb_dir, save_pb_name, as_text=save_pb_as_text)
+
+                return graphdef_frozen
+
+
+        # This line must be executed before loading Keras model.
+
+        model = tf.keras.models.load_model(model_fname)
+
+        session = tf.keras.backend.get_session()
+
+        self.INPUT_NODE = [t.op.name for t in model.inputs]
+        self.OUTPUT_NODE = [t.op.name for t in model.outputs]
+        print("in/out layer names:", self.INPUT_NODE, self.OUTPUT_NODE)
+
+        self.frozen_graph_def = freeze_graph(session.graph, session, [out.op.name for out in model.outputs])
+
+
+        self.frozen_graph = tf.Graph()
+
+        with self.frozen_graph.as_default():
+            tf.import_graph_def(self.frozen_graph_def)
+
+            self.frozen_net_inp = self.frozen_graph.get_tensor_by_name('import/' + self.INPUT_NODE[0] + ":0")
+            self.frozen_net_out = self.frozen_graph.get_tensor_by_name('import/' + self.OUTPUT_NODE[0]  + ":0")
+
+            self.frozen_session = tf.Session(graph=self.frozen_graph)
+
+    def convert_to_openvino(self, plugin="CPU"):
+        self.convert_to_frozen_tf()
+
+        try:
+            sys.path.append('/opt/intel/computer_vision_sdk/deployment_tools/model_optimizer')
+
+            from mo.utils.versions_checker import check_python_version
+            ret_code = check_python_version()
+            if ret_code:
+                sys.exit(ret_code)
+
+            from mo.main import driver
+            from mo.utils.cli_parser import get_tf_cli_parser
+
+            args = get_tf_cli_parser().parse_args({})
+            args.framework = 'tf'
+            args.input_model = 'tmp_frozen_model.pb'
+            args.input_shape = '[1,%s,%s,3]' % (self.input_size,self.input_size)
+
+            ret_code = driver(args)
+            if ret_code:
+                sys.exit(ret_code)
+
+            from openvino import inference_engine as ie
+            from openvino.inference_engine import IENetwork, IEPlugin
+        except Exception as e:
+            exception_type = type(e).__name__
+            print("The following error happened while importing Python API module:\n[ {} ] {}".format(exception_type, e))
+            sys.exit(1)
+
+        # Plugin initialization for specified device and load extensions library if specified.
+        plugin_dir = None
+        model_xml = './tmp_frozen_model.xml'
+        model_bin = './tmp_frozen_model.bin'
+        # Devices: GPU (intel), CPU, MYRIAD
+        plugin = IEPlugin(plugin, plugin_dirs=plugin_dir)
+        # Read IR
+        net = IENetwork(model=model_xml, weights=model_bin)
+        assert len(net.inputs.keys()) == 1
+        assert len(net.outputs) == 1
+        self.ov_input_blob = next(iter(net.inputs))
+        self.ov_out_blob = next(iter(net.outputs))
+        # Load network to the plugin
+        self.open_vino_exec_net = plugin.load(network=net)
+        del net
 
 
 
@@ -507,7 +615,23 @@ class YOLO(object):
 
         return average_precisions    
 
-    def predict(self, image):
+
+    def use_inference_engine(self, inference_engine):
+        if inference_engine == 'keras':
+            self.predict = self.predict_keras
+        elif inference_engine == 'tflite':
+            self.convert_to_lite()
+            self.predict = self.predict_tflite
+        elif inference_engine == 'tf':
+            self.convert_to_frozen_tf()
+            self.predict = self.predict_tffrozen
+        elif inference_engine == 'openvino':
+            self.convert_to_openvino()
+            self.predict = self.predict_openvino
+        else:
+            raise Exception("Not supported")
+
+    def predict_keras(self, image):
         image_h, image_w, _ = image.shape
         image = cv2.resize(image, (self.input_size, self.input_size))
         image = self.feature_extractor.normalize(image)
@@ -516,24 +640,12 @@ class YOLO(object):
         input_image = np.expand_dims(input_image, 0)
         dummy_array = np.zeros((1,1,1,1,self.max_box_per_image,4))
 
-
-
         netout = self.model.predict([input_image, dummy_array])[0]
         boxes  = decode_netout(netout, self.anchors, self.nb_class)
 
         return boxes
 
-    def predict_tflite(self,image):
-        if self.tflite_model is None:
-            self.convert_to_lite()
-
-        # Get input and output tensors.
-        input_details = self.lite_interpreter.get_input_details()
-        output_details = self.lite_interpreter.get_output_details()
-
-        #print(input_details)
-        #print(output_details)
-
+    def predict_tffrozen(self,image):
         image_h, image_w, _ = image.shape
         image = cv2.resize(image, (self.input_size, self.input_size))
         image = self.feature_extractor.normalize(image)
@@ -541,8 +653,24 @@ class YOLO(object):
         input_image = image[:,:,::-1]
         input_image = np.expand_dims(input_image, 0)
 
-#        netout = self.model.predict([input_image, dummy_array])[0]
+        input_tensor= input_image.astype(np.float32)
+        netout = self.frozen_session.run(self.frozen_net_out, feed_dict={self.frozen_net_inp: input_tensor})
 
+        boxes  = decode_netout(netout[0], self.anchors, self.nb_class)
+
+        return boxes
+
+    def predict_tflite(self,image):
+        # Get input and output tensors.
+        input_details = self.lite_interpreter.get_input_details()
+        output_details = self.lite_interpreter.get_output_details()
+
+        image_h, image_w, _ = image.shape
+        image = cv2.resize(image, (self.input_size, self.input_size))
+        image = self.feature_extractor.normalize(image)
+
+        input_image = image[:,:,::-1]
+        input_image = np.expand_dims(input_image, 0)
         input_tensor= input_image.astype(np.float32)
 
         self.lite_interpreter.set_tensor(input_details[0]['index'], input_tensor)
@@ -550,6 +678,26 @@ class YOLO(object):
         self.lite_interpreter.invoke()
 
         netout = self.lite_interpreter.get_tensor(output_details[0]['index'])
+
+        boxes  = decode_netout(netout[0], self.anchors, self.nb_class)
+
+        return boxes
+
+    def predict_openvino(self, image):
+        image_h, image_w, _ = image.shape
+        image = cv2.resize(image, (self.input_size, self.input_size))
+        image = self.feature_extractor.normalize(image)
+
+        input_image = image[:,:,::-1]
+        input_image = input_image.transpose((2, 0, 1))
+        input_image = np.expand_dims(input_image, 0)
+        input_tensor= input_image.astype(np.float32)
+
+        # Run inference
+        res = self.open_vino_exec_net.infer(inputs={self.ov_input_blob: input_tensor})
+        # Access the results and get the index of the highest confidence score
+        output_node_name = list(res.keys())[0]
+        netout = res[output_node_name]
 
         boxes  = decode_netout(netout[0], self.anchors, self.nb_class)
 
